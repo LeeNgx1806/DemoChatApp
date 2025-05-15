@@ -1,0 +1,142 @@
+service: chat-app
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: ap-southeast-2
+  environment:
+    WEBSOCKET_URL: "wss://w67ljvr3fa.execute-api.ap-southeast-2.amazonaws.com/dev/"
+    SNS_TOPIC_ARN: "arn:aws:sns:ap-southeast-2:977099015121:chat-app-dev-ChatTopic-CvdN8F2YGNpt"
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:*
+        - sns:*
+        - sqs:*
+      Resource: "*"
+functions:
+  connect:
+    handler: websocket/connect.handler
+    events:
+      - websocket:
+          route: $connect
+  disconnect:
+    handler: websocket/disconnect.handler
+    events:
+      - websocket:
+          route: $disconnect
+  messageHandler:
+    handler: websocket/messageHandler.handler
+    events:
+      - websocket:
+          route: default # Handles incoming WebSocket messages
+  sendMessage:
+    handler: handlers/sendMessage.handler
+    events:
+      - websocket:
+          route: sendMessage
+  receiveMessage:
+    handler: handlers/receiveMessage.handler
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - ChatQueue
+              - Arn
+
+  # REST API Functions
+  registerUser:
+    handler: handlers/registerUser.handler
+    events:
+      - http:
+          path: register
+          method: post
+          cors: true
+
+  loginUser:
+    handler: handlers/loginUser.handler
+    events:
+      - http:
+          path: login
+          method: post
+          cors: true
+
+  createChatRoom:
+    handler: handlers/createChatRoom.handler
+    events:
+      - http:
+          path: chatrooms
+          method: post
+          cors: true
+
+  getChatRooms:
+    handler: handlers/getChatRooms.handler
+    events:
+      - http:
+          path: chatrooms
+          method: get
+          cors:
+            origin: "*" # Allow all origins (or set specific origin)
+            headers:
+              - Content-Type
+              - user-id # Allow the 'user-id' header
+            methods:
+              - GET
+              - OPTIONS
+
+  getUser:
+    handler: handlers/getUser.handler
+    events:
+      - http:
+          path: getUser
+          method: get
+          cors: true
+
+  getUsers:
+    handler: functions/getUsers.handler
+    events:
+      - http:
+          path: users
+          method: get
+          cors:
+            origin: "*" # For development. In production, specify your domain
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - user-id
+            allowCredentials: true
+      - http:
+          path: users
+          method: options
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - user-id
+            allowCredentials: true
+
+resources:
+  Resources:
+    Chats:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Chats
+        AttributeDefinitions:
+          - AttributeName: chatId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: chatId
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+    ChatQueue:
+      Type: AWS::SQS::Queue
+    ChatTopic:
+      Type: AWS::SNS::Topic
