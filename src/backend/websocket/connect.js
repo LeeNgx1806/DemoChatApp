@@ -10,32 +10,19 @@ export const handler = async (event) => {
         console.log("Event received:", JSON.stringify(event));
 
         const { connectionId } = event.requestContext;
-        const chatId = event.queryStringParameters?.chatId || "default";
+        const timestamp = new Date().toISOString();
 
-        // Check if chatId exists in Chats Table
-        const chatExists = await dynamoDB.send(
-            new GetCommand({
-                TableName: "Chats",
-                Key: { chatId: chatId },
-            })
-        );
+        await dynamoDB.put({
+            TableName: 'Connections',
+            Item: {
+                connectionId,
+                timestamp,
+                ttl: Math.floor(Date.now() / 1000) + 24 * 60 * 60 // 24 hour TTL
+            }
+        }).promise();
 
-        if (!chatExists.Item) {
-            return { statusCode: 400, body: "Invalid chatId" };
-        }
-
-        // Store connection with chatId
-        await dynamoDB.send(
-            new PutCommand({
-                TableName: "Connections",
-                Item: { connectionId, chatId },
-            })
-        );
-
-        return { statusCode: 200, body: "Connected" };
+        return { statusCode: 200, body: 'Connected' };
     } catch (error) {
-        console.error("Error in connect handler:", error);
-        return { statusCode: 500, body: "Internal Server Error" };
+        return errorHandler(error, 'WebSocket Connect');
     }
 };
-
